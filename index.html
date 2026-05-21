@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Floodgate — API Gateway & Rate Limiter</title>
+    <style>
+      :root {
+        --ink: #0a0e12;
+        --surface: #121821;
+        --surface-2: #18202b;
+        --edge: #26313f;
+        --edge-soft: #1d2530;
+        --brand: #22d3ee;
+        --text: #e6ecf2;
+        --muted: #8b97a6;
+        --mono: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; background: var(--ink); color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      a { color: var(--brand); }
+      .wrap { max-width: 940px; margin: 0 auto; padding: 0 24px 64px; }
+      header {
+        border-bottom: 1px solid var(--edge-soft); position: sticky; top: 0;
+        background: rgba(10,14,18,0.95); backdrop-filter: blur(8px); z-index: 5;
+      }
+      .hd { max-width: 940px; margin: 0 auto; padding: 14px 24px; display: flex;
+        align-items: center; justify-content: space-between; }
+      .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+      .logo { width: 30px; height: 30px; border-radius: 8px; display: grid;
+        place-items: center; background: rgba(34,211,238,0.14);
+        box-shadow: inset 0 0 0 1px rgba(34,211,238,0.3); color: var(--brand); }
+      .tag { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+      h1 { font-size: 17px; margin: 28px 0 4px; }
+      .sub { color: var(--muted); font-size: 14px; margin: 0 0 18px; }
+      .card { background: var(--surface); border: 1px solid var(--edge);
+        border-radius: 12px; padding: 16px; }
+      .row { display: flex; align-items: center; gap: 12px; }
+      .btn { background: var(--brand); color: var(--ink); border: 0;
+        border-radius: 8px; padding: 0 14px; height: 36px; font-weight: 600;
+        font-size: 14px; cursor: pointer; }
+      .btn:disabled { opacity: 0.5; cursor: default; }
+      .btn.ghost { background: var(--surface-2); color: var(--text);
+        box-shadow: inset 0 0 0 1px var(--edge); }
+      table { width: 100%; border-collapse: collapse; font-size: 14px; }
+      th { text-align: left; font-size: 11px; text-transform: uppercase;
+        letter-spacing: .06em; color: var(--muted); font-weight: 500;
+        padding: 8px 10px; border-bottom: 1px solid var(--edge-soft); }
+      td { padding: 9px 10px; border-bottom: 1px solid var(--edge-soft); }
+      tr:last-child td { border-bottom: 0; }
+      .algo { font-family: var(--mono); font-size: 11px; padding: 2px 7px;
+        border-radius: 5px; background: rgba(34,211,238,0.12); color: var(--brand); }
+      .mono { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+      input, select { background: var(--ink); border: 1px solid var(--edge);
+        color: var(--text); border-radius: 8px; height: 36px; padding: 0 10px;
+        font-size: 14px; font-family: inherit; }
+      label { font-size: 11px; color: var(--muted); text-transform: uppercase;
+        letter-spacing: .05em; display: block; margin-bottom: 4px; }
+      .grid { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 12px; }
+      .cell { width: 14px; height: 14px; border-radius: 3px; background: var(--edge); }
+      .cell.ok { background: #34d399; }
+      .cell.no { background: #fb7185; }
+      .stat { font-family: var(--mono); }
+      .muted { color: var(--muted); }
+      .bar { height: 8px; border-radius: 4px; background: var(--ink);
+        overflow: hidden; display: flex; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="hd">
+        <div class="brand">
+          <span class="logo">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M3 7h18" /><path d="M6 12h12" /><path d="M10 17h4" />
+            </svg>
+          </span>
+          Floodgate
+        </div>
+        <span class="tag">api gateway · rate limiter</span>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <h1>API keys</h1>
+      <p class="sub">
+        Each key carries its own rate-limit algorithm and budget. Three
+        algorithms — token bucket, sliding-window log, and GCRA — all enforced
+        atomically in Postgres.
+      </p>
+      <div class="card">
+        <div class="row" style="justify-content: space-between; margin-bottom: 12px">
+          <strong style="font-size: 14px">Keys</strong>
+          <button class="btn ghost" id="seed">Reset demo keys</button>
+        </div>
+        <table>
+          <thead>
+            <tr><th>Name</th><th>Algorithm</th><th>Budget</th><th>Key</th><th></th></tr>
+          </thead>
+          <tbody id="keys"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+
+      <h1>Load test</h1>
+      <p class="sub">
+        Fire a burst of requests at a key and watch its limiter respond — each
+        square is one request: <span style="color:#34d399">allowed</span> or
+        <span style="color:#fb7185">limited</span>.
+      </p>
+      <div class="card">
+        <div class="row" style="flex-wrap: wrap; gap: 16px">
+          <div>
+            <label>Key</label>
+            <select id="lt-key" style="width: 230px"></select>
+          </div>
+          <div>
+            <label>Requests</label>
+            <select id="lt-count">
+              <option>30</option><option selected>50</option><option>100</option>
+            </select>
+          </div>
+          <div style="align-self: flex-end">
+            <button class="btn" id="run">Run burst</button>
+          </div>
+          <div style="align-self: flex-end" class="stat muted" id="lt-summary"></div>
+        </div>
+        <div class="grid" id="lt-grid"></div>
+      </div>
+
+      <h1>Usage — last hour</h1>
+      <p class="sub">Allowed vs. limited requests per key.</p>
+      <div class="card">
+        <div id="usage"><span class="muted">No traffic yet.</span></div>
+      </div>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
