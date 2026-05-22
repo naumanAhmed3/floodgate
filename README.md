@@ -5,7 +5,7 @@ An **API gateway** that meters traffic per API key with three real
 GCRA — each enforced **atomically in Postgres** so it stays correct
 across any number of concurrent gateway instances. Written in **Go**.
 
-**[▶ Live demo](https://floodgate-ten.vercel.app)** · **[Repo](https://github.com/naumanAhmed3/floodgate)**
+**[▶ Live demo](https://floodgate-nu.vercel.app)** · **[Repo](https://github.com/naumanAhmed3/floodgate)**
 
 ---
 
