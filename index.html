@@ -98,12 +98,14 @@
           <strong style="font-size: 14px">Keys</strong>
           <button class="btn ghost" id="seed">Reset demo keys</button>
         </div>
-        <table>
-          <thead>
-            <tr><th>Name</th><th>Algorithm</th><th>Budget</th><th>Key</th><th></th></tr>
-          </thead>
-          <tbody id="keys"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
-        </table>
+        <div style="overflow-x: auto; -webkit-overflow-scrolling: touch">
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Algorithm</th><th>Budget</th><th>Key</th><th></th></tr>
+            </thead>
+            <tbody id="keys"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+          </table>
+        </div>
       </div>
 
       <h1>Load test</h1>
