@@ -37,14 +37,20 @@ func Check(ctx context.Context, conn *pgx.Conn, k store.Key) (Result, error) {
 		return Result{}, err
 	}
 
+	// Read a shared clock after any wait for the lock.
+	var now time.Time
+	if err := tx.QueryRow(ctx, `select clock_timestamp()`).Scan(&now); err != nil {
+		return Result{}, err
+	}
+
 	var res Result
 	switch k.Algorithm {
 	case "token_bucket":
-		res, err = tokenBucket(ctx, tx, k)
+		res, err = tokenBucket(ctx, tx, k, now)
 	case "sliding_window":
-		res, err = slidingWindow(ctx, tx, k)
+		res, err = slidingWindow(ctx, tx, k, now)
 	case "gcra":
-		res, err = gcra(ctx, tx, k)
+		res, err = gcra(ctx, tx, k, now)
 	default:
 		return Result{}, fmt.Errorf("unknown algorithm %q", k.Algorithm)
 	}
@@ -61,11 +67,11 @@ func Check(ctx context.Context, conn *pgx.Conn, k store.Key) (Result, error) {
 // ── Token bucket ─────────────────────────────────────────────
 // Tokens refill continuously at limit/window per second up to a
 // `burst` ceiling; each request costs one token.
-func tokenBucket(ctx context.Context, tx pgx.Tx, k store.Key) (Result, error) {
+func tokenBucket(ctx context.Context, tx pgx.Tx, k store.Key, now time.Time) (Result, error) {
 	// A fresh bucket starts full, so a client can burst immediately.
 	if _, err := tx.Exec(ctx,
-		`insert into rl_state (key_id, tokens, last_refill) values ($1, $2, now())
-		 on conflict do nothing`, k.ID, float64(k.Burst)); err != nil {
+		`insert into rl_state (key_id, tokens, last_refill) values ($1, $2, $3)
+		 on conflict do nothing`, k.ID, float64(k.Burst), now); err != nil {
 		return Result{}, err
 	}
 	var tokens float64
@@ -76,7 +82,6 @@ func tokenBucket(ctx context.Context, tx pgx.Tx, k store.Key) (Result, error) {
 		return Result{}, err
 	}
 
-	now := time.Now()
 	ratePerSec := float64(k.Limit) / float64(k.WindowSec)
 	capacity := float64(k.Burst)
 	tokens = math.Min(capacity, tokens+now.Sub(lastRefill).Seconds()*ratePerSec)
@@ -107,8 +112,7 @@ func tokenBucket(ctx context.Context, tx pgx.Tx, k store.Key) (Result, error) {
 // ── Sliding window log ───────────────────────────────────────
 // Keeps a timestamp per accepted request; a request is allowed while
 // fewer than `limit` timestamps fall inside the trailing window.
-func slidingWindow(ctx context.Context, tx pgx.Tx, k store.Key) (Result, error) {
-	now := time.Now()
+func slidingWindow(ctx context.Context, tx pgx.Tx, k store.Key, now time.Time) (Result, error) {
 	window := time.Duration(k.WindowSec) * time.Second
 
 	if _, err := tx.Exec(ctx,
@@ -160,9 +164,9 @@ func slidingWindow(ctx context.Context, tx pgx.Tx, k store.Key) (Result, error) 
 // The Generic Cell Rate Algorithm — a leaky-bucket meter held as a
 // single timestamp (the "theoretical arrival time"). Elegant and the
 // approach Cloudflare uses for edge rate limiting.
-func gcra(ctx context.Context, tx pgx.Tx, k store.Key) (Result, error) {
+func gcra(ctx context.Context, tx pgx.Tx, k store.Key, now time.Time) (Result, error) {
 	if _, err := tx.Exec(ctx,
-		`insert into rl_state (key_id) values ($1) on conflict do nothing`, k.ID); err != nil {
+		`insert into rl_state (key_id, tat) values ($1, $2) on conflict do nothing`, k.ID, now); err != nil {
 		return Result{}, err
 	}
 	var tat time.Time
@@ -171,7 +175,6 @@ func gcra(ctx context.Context, tx pgx.Tx, k store.Key) (Result, error) {
 		return Result{}, err
 	}
 
-	now := time.Now()
 	emission := time.Duration(float64(k.WindowSec) / float64(k.Limit) * float64(time.Second))
 	tolerance := time.Duration(k.Burst-1) * emission // burst allowance
 
