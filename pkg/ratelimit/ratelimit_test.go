@@ -19,7 +19,7 @@ func openTestDB(t *testing.T, tracer pgx.QueryTracer) (context.Context, *pgx.Con
 	t.Helper()
 	url := os.Getenv("TEST_DATABASE_URL")
 	if url == "" {
-		t.Skip("set TEST_DATABASE_URL to run PostgreSQL tests")
+		t.Fatal("TEST_DATABASE_URL is required for PostgreSQL tests")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)
@@ -84,7 +84,7 @@ func beginTestTx(t *testing.T, ctx context.Context, conn *pgx.Conn) pgx.Tx {
 func TestTokenBucketUsesProvidedTime(t *testing.T) {
 	url := os.Getenv("TEST_DATABASE_URL")
 	if url == "" {
-		t.Skip("set TEST_DATABASE_URL to run PostgreSQL tests")
+		t.Fatal("TEST_DATABASE_URL is required for PostgreSQL tests")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
