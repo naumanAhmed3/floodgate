@@ -16,9 +16,6 @@ import (
 func Handler(w http.ResponseWriter, r *http.Request) {
 	secret := r.Header.Get("X-API-Key")
 	if secret == "" {
-		secret = r.URL.Query().Get("key") // convenience for the browser demo
-	}
-	if secret == "" {
 		web.Err(w, http.StatusUnauthorized, "missing X-API-Key")
 		return
 	}
