@@ -9,6 +9,9 @@ import (
 
 // Handler returns per-key allowed/denied totals over the last hour.
 func Handler(w http.ResponseWriter, r *http.Request) {
+	if !web.RequireAdmin(w, r) {
+		return
+	}
 	ctx := r.Context()
 	conn, err := store.Connect(ctx)
 	if err != nil {
