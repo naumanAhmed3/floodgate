@@ -16,6 +16,9 @@ var validAlgorithms = map[string]bool{
 
 // Handler manages API keys: GET list, POST create, DELETE ?id=.
 func Handler(w http.ResponseWriter, r *http.Request) {
+	if !web.RequireAdmin(w, r) {
+		return
+	}
 	ctx := r.Context()
 	conn, err := store.Connect(ctx)
 	if err != nil {
