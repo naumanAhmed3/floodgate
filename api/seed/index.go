@@ -11,6 +11,13 @@ import (
 // keys, and creates one key per algorithm so the dashboard has
 // something to compare immediately.
 func Handler(w http.ResponseWriter, r *http.Request) {
+	if !web.RequireAdmin(w, r) {
+		return
+	}
+	if r.Header.Get("X-Confirm-Destructive-Seed") != "true" {
+		web.Err(w, http.StatusForbidden, "destructive seed requires explicit confirmation")
+		return
+	}
 	ctx := r.Context()
 	conn, err := store.Connect(ctx)
 	if err != nil {
